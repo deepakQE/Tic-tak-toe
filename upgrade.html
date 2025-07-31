@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaxy Tic Tac Toe</title>
+  <style>
+    :root {
+      --bg-light: #f0f0f0;
+      --bg-dark: #121212;
+      --bg-galaxy: #000;
+      --text-light: #000;
+      --text-dark: #eee;
+      --cell-color: #1e1e1e;
+      --cell-hover: #222;
+      --accent-neon: #0ff;
+      --accent-pink: #f0f;
+      --win-glow: #08f;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-dark);
+      transition: background 0.5s, color 0.5s;
+      overflow: hidden;
+    }
+
+    canvas#stars {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -1;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 250px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 1rem;
+      color: #fff;
+      overflow-y: auto;
+    }
+
+    .sidebar h3 {
+      margin-top: 0;
+    }
+
+    .history-item {
+      margin-bottom: 10px;
+      padding: 5px;
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 3px solid var(--accent-neon);
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .game-board {
+      display: grid;
+      grid-template-columns: repeat(3, 120px);
+      grid-template-rows: repeat(3, 120px);
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .cell {
+      background-color: var(--cell-color);
+      border: 2px solid var(--accent-pink);
+      color: white;
+      font-size: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.3s;
+    }
+
+    .cell:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 10px var(--accent-neon);
+    }
+
+    .cell.win {
+      background: var(--win-glow);
+      box-shadow: 0 0 20px var(--win-glow);
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { box-shadow: 0 0 10px 2px var(--win-glow); }
+      to { box-shadow: 0 0 20px 5px var(--win-glow); }
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      background: var(--accent-pink);
+      border: none;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--accent-pink);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .button:hover {
+      background: var(--accent-neon);
+      box-shadow: 0 0 15px var(--accent-neon);
+    }
+  </style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="container">
+  <div class="sidebar">
+    <h3>Game History</h3>
+    <div id="history"></div>
+  </div>
+  <div class="main">
+    <h1>Tic Tac Toe</h1>
+    <div class="game-board" id="board"></div>
+    <div class="controls">
+      <button class="button" onclick="toggleTheme()">Toggle Theme</button>
+      <button class="button" onclick="setDifficulty('easy')">Easy</button>
+      <button class="button" onclick="setDifficulty('medium')">Medium</button>
+      <button class="button" onclick="setDifficulty('hard')">Hard</button>
+    </div>
+    <div id="status" style="margin-top: 20px; font-size: 1.2rem;"></div>
+  </div>
+</div>
+<script>
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const historyEl = document.getElementById('history');
+
+  let board = Array(9).fill(null);
+  let currentPlayer = 'X';
+  let gameActive = true;
+  let difficulty = 'hard';
+
+  const winPatterns = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6]
+  ];
+
+  function renderBoard() {
+    boardEl.innerHTML = '';
+    board.forEach((cell, index) => {
+      const div = document.createElement('div');
+      div.className = 'cell';
+      div.textContent = cell || '';
+      div.addEventListener('click', () => makeMove(index));
+      boardEl.appendChild(div);
+    });
+  }
+
+  function makeMove(index) {
+    if (!gameActive || board[index]) return;
+    board[index] = currentPlayer;
+    renderBoard();
+    if (checkWinner(currentPlayer)) {
+      statusEl.textContent = `${currentPlayer} wins!`;
+      logHistory(`${currentPlayer} wins`);
+      highlightWin(currentPlayer);
+      gameActive = false;
+      setTimeout(resetGame, 2000);
+    } else if (!board.includes(null)) {
+      statusEl.textContent = `Draw!`;
+      logHistory(`Draw`);
+      gameActive = false;
+      setTimeout(resetGame, 2000);
+    } else {
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+      if (currentPlayer === 'O') aiMove();
+    }
+  }
+
+  function aiMove() {
+    const empty = board.map((val, idx) => val ? null : idx).filter(v => v !== null);
+    let move;
+    if (difficulty === 'easy') {
+      move = empty[Math.floor(Math.random() * empty.length)];
+    } else if (difficulty === 'medium') {
+      move = empty.find(i => isWinningMove(i, 'O')) || empty.find(i => isWinningMove(i, 'X')) || empty[0];
+    } else {
+      move = minimax(board, 'O').index;
+    }
+    makeMove(move);
+  }
+
+  function isWinningMove(index, player) {
+    const temp = [...board];
+    temp[index] = player;
+    return checkWinner(player, temp);
+  }
+
+  function checkWinner(player, b = board) {
+    return winPatterns.some(p => p.every(i => b[i] === player));
+  }
+
+  function highlightWin(player) {
+    const cells = document.querySelectorAll('.cell');
+    winPatterns.forEach(pattern => {
+      if (pattern.every(i => board[i] === player)) {
+        pattern.forEach(i => cells[i].classList.add('win'));
+      }
+    });
+  }
+
+  function logHistory(result) {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.textContent = `${result} (${new Date().toLocaleTimeString()})`;
+    historyEl.prepend(item);
+  }
+
+  function resetGame() {
+    board = Array(9).fill(null);
+    currentPlayer = 'X';
+    gameActive = true;
+    statusEl.textContent = '';
+    renderBoard();
+  }
+
+  function setDifficulty(level) {
+    difficulty = level;
+    resetGame();
+  }
+
+  function minimax(newBoard, player) {
+    const availSpots = newBoard.map((v, i) => v ? null : i).filter(v => v !== null);
+    if (checkWinner('X', newBoard)) return { score: -10 };
+    if (checkWinner('O', newBoard)) return { score: 10 };
+    if (availSpots.length === 0) return { score: 0 };
+    const moves = [];
+    for (let i = 0; i < availSpots.length; i++) {
+      const move = {};
+      move.index = availSpots[i];
+      newBoard[availSpots[i]] = player;
+      const result = minimax(newBoard, player === 'O' ? 'X' : 'O');
+      move.score = result.score;
+      newBoard[availSpots[i]] = null;
+      moves.push(move);
+    }
+    return player === 'O'
+      ? moves.reduce((best, m) => m.score > best.score ? m : best)
+      : moves.reduce((best, m) => m.score < best.score ? m : best);
+  }
+
+  function toggleTheme() {
+    const themes = ['dark', 'light', 'galaxy'];
+    const current = document.body.dataset.theme || 'dark';
+    const next = themes[(themes.indexOf(current) + 1) % themes.length];
+    document.body.dataset.theme = next;
+    document.body.style.backgroundColor = next === 'light' ? '#f0f0f0' : next === 'galaxy' ? '#000' : '#121212';
+  }
+
+  function initStars() {
+    const canvas = document.getElementById('stars');
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      stars = Array.from({ length: 100 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.5,
+        dx: (Math.random() - 0.5) * 0.5,
+        dy: (Math.random() - 0.5) * 0.5
+      }));
+    }
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      stars.forEach(s => {
+        s.x += s.dx;
+        s.y += s.dy;
+        if (s.x < 0 || s.x > canvas.width) s.dx *= -1;
+        if (s.y < 0 || s.y > canvas.height) s.dy *= -1;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+      });
+      requestAnimationFrame(animate);
+    }
+    resize();
+    animate();
+    window.addEventListener('resize', resize);
+  }
+
+  renderBoard();
+  initStars();
+</script>
+</body>
+</html>
